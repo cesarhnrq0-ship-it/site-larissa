@@ -1,0 +1,47 @@
+# Publica o site no GitHub Pages sozinho a cada envio (push) para a branch main.
+# Se o projeto tiver package.json, compila antes (npm run build) e publica a pasta gerada
+# (publicar/ ou dist/); senão, publica os arquivos da raiz como estão.
+name: Publicar site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compilar (se for projeto Node)
+        id: build
+        run: |
+          if [ -f package.json ]; then npm ci && npm run build; fi
+          if [ -d publicar ]; then echo "dir=publicar" >> "$GITHUB_OUTPUT";
+          elif [ -d dist ]; then echo "dir=dist" >> "$GITHUB_OUTPUT";
+          else mkdir -p _site && rsync -a --exclude '.git' --exclude '.github' --exclude 'CLAUDE.md' --exclude 'node_modules' ./ _site/ && echo "dir=_site" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.build.outputs.dir }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
